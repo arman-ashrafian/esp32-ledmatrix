@@ -103,7 +103,7 @@ void draw_time(uint16_t color)
     return;
   }
   strftime(buffer,80,"%a %I:%M",&timeinfo);
-  display.setCursor(2,10);
+  display.setCursor(2,2);
   display.setTextColor(color);
   display.print(buffer);
 
@@ -122,7 +122,7 @@ void draw_date(uint16_t color)
     return;
   }
   strftime(buffer,80,"%b %d",&timeinfo);
-  display.setCursor(2,10);
+  display.setCursor(20,20);
   display.setTextColor(color);
   display.print(buffer);
 
@@ -172,11 +172,10 @@ int color_index2 = 4;
 void loop() { 
   display.clearDisplay();
   draw_time(myCOLORS[color_index1]);
-  delay(10000); // 10 seconds
-  display.clearDisplay();
   draw_date(myCOLORS[color_index2]);
-  delay(10000);
+  delay(10000); // 10 seconds
 
+  // change color
   color_index1 = (color_index1 + 1) % 7;
   color_index2 = (color_index2 + 1) % 7;
 }
