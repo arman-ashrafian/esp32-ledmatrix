@@ -6,7 +6,7 @@
 // -------- Standard Libraries --------
 #include <PxMatrix.h>
 #include <WiFi.h>
-// #include "time.h"
+#include "time.h"
 
 #include "secret.h"
 
@@ -76,15 +76,6 @@ void display_update_enable(bool is_enable)
 
 }
 
-// draws x & y axis
-void draw_grid(uint16_t color) {
-  display.drawLine(0,31,63,31,color); // x-axis
-  display.drawLine(0,0,0,32,color);   // y-axis
-
-  display_update_enable(true);
-  yield();
-}
-
 void draw_name(uint16_t color) {
   display_update_enable(true);
 
@@ -103,34 +94,46 @@ void draw_name(uint16_t color) {
 
 }
 
-tm get_time_struct(uint16_t color)
+void draw_time(uint16_t color)
 {
-  struct tm timeinfo;
-  if(!getLocalTime(&timeinfo)){
+  struct tm timeinfo;         // unix time info
+  char buffer[80];   // buffer to hold "Day Hour:Min"
+
+  if(!getLocalTime(&timeinfo)) {
     Serial.println("Failed to obtain time");
     return;
   }
-  return timeinfo;
+  strftime(buffer,80,"%a %I:%M",&timeinfo);
+  display.setCursor(2,10);
+  display.setTextColor(color);
+  display.print(buffer);
+
+  display_update_enable(true);
+  yield();
+
 }
 
+
+// connects to wifi and and displays
+// when finished. 
 void connect_wifi() {
-  // connect to WiFi
   WiFi.begin(ssid, password);
   display.setCursor(2,5);
   while (WiFi.status() != WL_CONNECTED) {
       delay(500);
-      display.write('x');
   }
   display.clearDisplay();
-  display.setCursor(5,2);
-  display.print("WIFI");
+  display.setCursor(10,2);
+  display.print("WiFi");
   display.setCursor(2,10);
   display.print("Connected!");
-  delay(1000);
+  delay(5000);
 
   display_update_enable(true);
   yield();
 }
+
+// --------- Sketch --------
 
 void setup() {
   Serial.begin(115200);
@@ -139,15 +142,15 @@ void setup() {
   // slow update
   display.setFastUpdate(false);
 
+  // delay 5 seconds after connecting 
   connect_wifi();
-  delay(2000);
 
-  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
-  draw_date(myRED);
+  // config to PST
+  configTime(gmtOffset_sec * 4, daylightOffset_sec, ntpServer);
 }
 
 void loop() { 
   display.clearDisplay();
-  draw_name(myRED);
-  delay(1);
+  draw_time(myCYAN);
+  delay(10000); // 10 seconds
 }
