@@ -48,8 +48,7 @@ uint16_t myWHITE = display.color565(255, 255, 255);
 uint16_t myYELLOW = display.color565(255, 255, 0);
 uint16_t myCYAN = display.color565(0, 255, 255);
 uint16_t myMAGENTA = display.color565(255, 0, 255);
-uint16_t myBLACK = display.color565(0, 0, 0);
-uint16_t myCOLORS[8]={myRED,myGREEN,myBLUE,myWHITE,myYELLOW,myCYAN,myMAGENTA,myBLACK};
+uint16_t myCOLORS[7]={myRED,myGREEN,myBLUE,myWHITE,myYELLOW,myCYAN,myMAGENTA};
 
 void IRAM_ATTR display_updater()
 {
@@ -113,6 +112,25 @@ void draw_time(uint16_t color)
 
 }
 
+void draw_date(uint16_t color)
+{
+  struct tm timeinfo; // unix time info
+  char buffer[80];    // buffer to hold "Day Hour:Min"
+
+  if(!getLocalTime(&timeinfo)) {
+    Serial.println("Failed to obtain time");
+    return;
+  }
+  strftime(buffer,80,"%b %d",&timeinfo);
+  display.setCursor(2,10);
+  display.setTextColor(color);
+  display.print(buffer);
+
+  display_update_enable(true);
+  yield();
+
+}
+
 
 // connects to wifi and and displays
 // when finished. 
@@ -149,8 +167,16 @@ void setup() {
   configTime(gmtOffset_sec * 4, daylightOffset_sec, ntpServer);
 }
 
+int color_index1 = 0;
+int color_index2 = 4;
 void loop() { 
   display.clearDisplay();
-  draw_time(myCYAN);
+  draw_time(myCOLORS[color_index1]);
   delay(10000); // 10 seconds
+  display.clearDisplay();
+  draw_date(myCOLORS[color_index2]);
+  delay(10000);
+
+  color_index1 = (color_index1 + 1) % 7;
+  color_index2 = (color_index2 + 1) % 7;
 }
