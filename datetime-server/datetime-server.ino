@@ -10,6 +10,15 @@
 
 #include "secret.h" // wifi info
 
+// Pins connected to LED Matrix
+#define P_LAT 22
+#define P_A 19
+#define P_B 23
+#define P_C 18
+#define P_D 5
+#define P_E 15
+#define P_OE 2
+
 const char* ssid       = SSID;
 const char* password   = PASSWORD;
 
@@ -26,30 +35,27 @@ const char* HTML_STRING = "<!DOCTYPE html>"
 "    <meta name='viewport' content='width=device-width, initial-scale=1'>"
 "</head>"
 "<body>"
-"    <button><a href='/displayDateTime'>Display Date & Time</a></button>"
+"    <button><a href='/T'>Display Date & Time</a></button>"
 "</body>"
 "</html>";
-
-// Pins connected to LED Matrix
-#define P_LAT 22
-#define P_A 19
-#define P_B 23
-#define P_C 18
-#define P_D 5
-#define P_E 15
-#define P_OE 2
 
 hw_timer_t * timer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 
 // this controls the brightness somehow
-uint8_t display_draw_time=20;
+uint8_t display_draw_time=30;
 
 // contructor for PXMatrix
-PxMATRIX display(64,32,P_LAT, P_OE,P_A,P_B,P_C,P_D);
+PxMATRIX display(64,32,P_LAT,P_OE,P_A,P_B,P_C,P_D);
 
 // server listening on port 80
 WiFiServer server(80);
+
+// http request
+String header;
+
+// client connecting to this server
+WiFiClient client;
 
 // my name
 char firstname[] = "ARMAN";
@@ -112,41 +118,36 @@ void draw_name(uint16_t color) {
 
 }
 
-void draw_time(uint16_t color)
+
+void draw_datetime(uint16_t color1, uint16_t color2)
 {
-  struct tm timeinfo;         // unix time info
-  char buffer[80];   // buffer to hold "Day Hour:Min"
+  struct tm timeinfo;       // unix time info
+  char buffer1[20];         // buffer to hold "Day Hour:Min"
+  char buffer2[20];         // buffer to hold "Month Day"
 
   if(!getLocalTime(&timeinfo)) {
     Serial.println("Failed to obtain time");
     return;
   }
-  strftime(buffer,80,"%a %I:%M",&timeinfo);
+  display.clearDisplay();
+
+  // Day Hour:Min
+  strftime(buffer1,20,"%a %I:%M",&timeinfo);
   display.setCursor(2,2);
-  display.setTextColor(color);
-  display.print(buffer);
-
-  display_update_enable(true);
-  yield();
-
-}
-
-void draw_date(uint16_t color)
-{
-  struct tm timeinfo; // unix time info
-  char buffer[80];    // buffer to hold "Day Hour:Min"
-
-  if(!getLocalTime(&timeinfo)) {
-    Serial.println("Failed to obtain time");
-    return;
-  }
-  strftime(buffer,80,"%b %d",&timeinfo);
+  display.setTextColor(myCOLORS[color1]);
+  display.print(buffer1);
+  Serial.println(buffer1);
+  // Month Day
+  strftime(buffer2,20,"%b %d",&timeinfo);
   display.setCursor(20,20);
-  display.setTextColor(color);
-  display.print(buffer);
+  display.setTextColor(myCOLORS[color2]);
+  display.print(buffer2);
+  Serial.println(buffer2);
 
   display_update_enable(true);
   yield();
+  delay(10000);
+  display_update_enable(false);
 }
 
 
@@ -156,7 +157,7 @@ void connect_wifi() {
   WiFi.begin(ssid, password);
   display.setCursor(2,5);
   while (WiFi.status() != WL_CONNECTED) {
-      delay(500);
+    delay(500);
   }
   display.clearDisplay();
   display.setTextColor(myCYAN);
@@ -178,31 +179,34 @@ void setup() {
   display.begin(16);  // 1:16 Scan Rate
 
   // slow update
-  display.setFastUpdate(false);
+  display.setFastUpdate(true);
 
   // delay 5 seconds after connecting 
   connect_wifi();
   delay(2000);
-  server.begin();
-
   // config to PST
   configTime(gmtOffset_sec * 4, daylightOffset_sec, ntpServer);
+  // start server on port 80
+  server.begin();
 }
 
 // starting color indices
 int color_index1 = 0;
 int color_index2 = 3;
-
+bool showtime = false;
 // ------- Main Loop --------
 void loop() { 
-  WiFiClient client = server.available();   // listen for incoming clients
+  client = server.available();
 
-  if(client) { // if client is trying to connect
-    String currentLine = "";
-    while(client.connected()) {
-      if(client.available()) {
-        char c = client.read(); // read 1st byte of http request
-        if(c == '\n') {
+  if (client) {                             // If a new client connects,
+    Serial.println("New Client.");          // print a message out in the serial port
+    String currentLine = "";                // make a String to hold incoming data from the client
+    while (client.connected()) {            // loop while the client's connected
+      if (client.available()) {             // if there's bytes to read from the client,
+        char c = client.read();             // read a byte, then
+        Serial.write(c);                    // print it out the serial monitor
+        header += c;
+        if (c == '\n') {                    // if the byte is a newline character
           // if the current line is blank, you got two newline characters in a row.
           // that's the end of the client HTTP request, so send a response:
           if (currentLine.length() == 0) {
@@ -210,35 +214,68 @@ void loop() {
             // and a content-type so the client knows what's coming, then a blank line:
             client.println("HTTP/1.1 200 OK");
             client.println("Content-type:text/html");
+            client.println("Connection: close");
             client.println();
-
-            // the content of the HTTP response follows the header:
-            client.print(HTML_STRING);
-            // The HTTP response ends with another blank line:
+            
+            // turns the GPIOs on and off
+            if (header.indexOf("GET /D") >= 0) {
+              display.clearDisplay();
+              display.setCursor(5,5);
+              display.setTextColor(myBLUE);
+              display.print("GET /D");
+            }
+            else if(header.indexOf("GET /T") >= 0) {
+              showtime = true;
+            }
+            
+            client.println(HTML_STRING);
+            // The HTTP response ends with another blank line
             client.println();
             break;
-        } else {
-            currentLine = ""; 
+          } else { // if you got a newline, then clear currentLine
+            currentLine = "";
+          }
+        } else if (c != '\r') {  // if you got anything else but a carriage return character,
+          currentLine += c;      // add it to the end of the currentLine
         }
-      } else if (c != '\r') {  // if you got anything else but a carriage return character,
-          currentLine += c;    // add it to the end of the currentLine
-        }
-
-        // ----- Handlers -----
-        if(currentLine.endsWith("GET /displayDateTime")); {
-          Serial.println("DISPLAY DATE TIME");
-        }
-
       }
     }
-    client.stop(); // close connection
+    // Clear the header variable
+    header = "";
+    // Close the connection
+    client.stop();
+    Serial.println("Client disconnected.");
+    Serial.println("");
   }
 
-  display.clearDisplay();
-  draw_time(myCOLORS[color_index1]);
-  draw_date(myCOLORS[color_index2]);
+  if(showtime) {
+    struct tm timeinfo;       // unix time info
+    char buffer1[20];         // buffer to hold "Day Hour:Min"
+    char buffer2[20];         // buffer to hold "Month Day"
 
-  // change color
-  color_index1 = (color_index1 + 1) % 7;
-  color_index2 = (color_index2 + 1) % 7;
+    if(!getLocalTime(&timeinfo)) {
+      Serial.println("Failed to obtain time");
+      return;
+    }
+
+    display.clearDisplay();
+
+    // Day Hour:Min
+    strftime(buffer1,20,"%a %I:%M",&timeinfo);
+    display.setCursor(2,2);
+    display.setTextColor(myCOLORS[color_index1]);
+    display.print(buffer1);
+
+    // Month Day
+    strftime(buffer2,20,"%b %d",&timeinfo);
+    display.setCursor(20,20);
+    display.setTextColor(myCOLORS[color_index2]);
+    display.print(buffer2);
+
+    // change color
+    color_index1 = (color_index1 + 1) % 7;
+    color_index2 = (color_index2 + 1) % 7;
+
+    delay(2000);
+  }
 }
